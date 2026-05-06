@@ -1,7 +1,9 @@
 ---
 - name: Add the OS specific variables
   include_vars: "{{ ansible_facts['os_family'] }}.yml"
+
 - include_tasks: "tomcat-setup-{{ ansible_facts['os_family'] }}.yml"
+
 - name: Configurar ruta webapps para RedHat/CentOS
   set_fact:
     tomcat_webapps_path: "/var/lib/tomcat9/webapps"
@@ -11,3 +13,32 @@
   set_fact:
     tomcat_webapps_path: "/opt/tomcat/webapps"
   when: ansible_os_family == "Debian"
+
+# 🔥 AQUÍ AÑADIMOS LA DESCARGA DEL WAR
+
+- name: Descargar y copiar el artefacto desde Artifactory
+  get_url:
+    url: "{{ war_from_artifactory_url }}"
+    dest: "{{ tomcat_webapps_path }}/{{ app_name }}.war"
+    url_username: "{{ artifactory_user }}"
+    url_password: "{{ artifactory_password }}"
+    force_basic_auth: yes
+    mode: '0644'
+  when: deploy_artifact | default(false)
+
+# 🧪 DEBUG (muy recomendable)
+- name: Verificar archivo descargado
+  shell: file "{{ tomcat_webapps_path }}/{{ app_name }}.war"
+  register: war_check
+  when: deploy_artifact | default(false)
+
+- debug:
+    var: war_check.stdout
+  when: deploy_artifact | default(false)
+
+# 🔁 Reiniciar Tomcat para asegurar despliegue
+- name: Restart Tomcat
+  service:
+    name: tomcat
+    state: restarted
+  when: deploy_artifact | default(false)
